@@ -4,6 +4,17 @@ The global harness carries personal behavior and blast-radius defaults. A reposi
 facts and optional tooling specific to that repository. Repository mode must inspect first and
 install only what the repository can justify.
 
+## Harness scope
+
+Write harness-specific config — agent definitions, hooks, MCP — only for harnesses actually
+installed on the machine. Check `command -v claude` and `command -v codex`; a Codex binary with no
+`~/.codex/config.toml` is an unconfigured install and counts as absent. Dead `.codex/` config in a
+repo that never runs Codex is noise a reviewer has to reason about.
+
+Instruction files are the exception: always write both `CLAUDE.md` and `AGENTS.md`. `AGENTS.md` is
+the cross-tool convention other coding agents read, so it stays useful in a shared repository
+regardless of which harness you personally run.
+
 ## Baseline instruction files
 
 Create `CLAUDE.md` and `AGENTS.md` with the same repository facts. Keep only information the
@@ -37,14 +48,15 @@ npx skills update
 ```
 
 Tracker workflow candidates are `setup-matt-pocock-skills`, `to-spec`, `to-tickets`, `implement`,
-`triage`, and `wayfinder`; include and run setup before selecting those. `code-review` and
+and `triage`; include and run setup before selecting those. `wayfinder` is global but still
+needs that setup to find the repository's tracker. `code-review` and
 `grill-with-docs` instead depend on repository standards, specs, and domain-document layout.
 Select any of them only when the repository's tracker, test seams, and documentation workflow
 support them.
 
 `research` is optional per repo when the user explicitly wants a durable cited Markdown artifact.
 Do not install it merely for current dependency docs: web lookup already covers that.
-Do not install `grill-me` alone; it delegates to the separate `grilling` skill. Prefer
+Do not install `grill-me`; it only launches the global `grilling` skill. Prefer
 `grill-with-docs` when the repository benefits from a lasting `CONTEXT.md` or ADR update.
 
 Do not force `tdd`, `codebase-design`, `improve-codebase-architecture`, `prototype`, or
@@ -65,6 +77,24 @@ are repository decisions:
   reaches this toolchain. Requires the `semgrep` binary. **Pin third-party ruleset revisions** —
   Trail of Bits, 0xdea, and Decurity rules are executable patterns fetched over the network, and
   an unpinned audit is neither reproducible nor reviewed. Keep `--metrics=off`.
+
+  **Try the binary without the plugin first.** The plugin is not installed at any scope as of
+  2026-08-17, and `semgrep -e '<pattern>' -l <lang> <path>` covers the ad-hoc case with no network
+  and no container. What the plugin adds is orchestration: parallel scan sets, SARIF, per-finding
+  verifier agents. Install it in the repository that wants that, not globally. Behind a TLS
+  interceptor its registry configs cannot reach the network from the host binary at all —
+  `docs/SKILLS.md` has the reason and the container workaround, and don't debug TLS in repo mode:
+
+  ```bash
+  claude plugin install static-analysis@trailofbits --scope project
+  ```
+
+  Point `third_party` rulesets at rule *subdirectories*, never a clone root: the ToB
+  `semgrep-rules` root contains its own `.github/workflows/*.yml`, which semgrep tries to parse
+  as rules and fails the whole scan with `null values prohibited`. Verified 2026-08-15 at
+  `31390b3a` — `--config <clone>/python --config <clone>/generic --config <clone>/yaml` loads
+  41 rules cleanly. The skill's `run-scans.sh` passes the clone root, so a third-party entry
+  needs its findings taken from a hand-run scan or the failure treated as expected.
 - **`agentic-actions-auditor`** — only when the repository's workflows invoke Claude Code Action,
   Gemini CLI, OpenAI Codex, or GitHub AI Inference. It audits AI agents in CI (prompt injection
   via `pull_request_target`/`issue_comment`, env-var intermediaries, wildcard allowlists), not
@@ -88,15 +118,15 @@ Good evidence-backed examples are a read-only domain investigator for a very lar
 log extractor for a repository with unusually large proprietary logs. Do not create generic
 planner, implementer, reviewer, Terraform, Kubernetes, or “engineering division” roles.
 
-When justified, create equivalent definitions in `.claude/agents/` and `.codex/agents/`, pin the
-model and effort, minimize tools, and make read-only the default. For parallel writers, require
+When justified, create the definition for each installed harness — `.claude/agents/` and
+`.codex/agents/` — pin the model and effort, minimize tools, and make read-only the default. For parallel writers, require
 file ownership and worktree isolation. Project agents override the global utilities only when the
 repository has a measured reason.
 
 ## Hooks
 
-Use a hook only for behavior that must be deterministic. Configure both harnesses where the same
-policy applies:
+Use a hook only for behavior that must be deterministic. Configure each installed harness where
+the same policy applies:
 
 - Claude Code: `.claude/settings.json`
 - Codex: `.codex/hooks.json` or `.codex/config.toml`
@@ -113,8 +143,8 @@ are context-efficient and already expose identity and dry-run controls.
 
 Recommend a project-scoped MCP only when a recurring live-data capability has no adequate CLI or
 the MCP is materially better. Document its credential scope, read/write surface, enabled tools,
-fallback, and owner. Use `.mcp.json` for Claude and `.codex/config.toml` for Codex. Never put
-secrets directly in either file.
+fallback, and owner. Use `.mcp.json` for Claude and, when Codex is installed, `.codex/config.toml`.
+Never put secrets directly in either file.
 
 ## Memory
 

@@ -1,9 +1,21 @@
 # Global skills and plugins
 
-Last reviewed: **2026-08-06**.
+Last reviewed: **2026-08-13**.
 
 The global harness carries behavior (`src/core.md`). This file records the small set of *skills*
 and *plugins* installed at user level for both harnesses, and why each one earned that scope.
+
+**`../skills.sh` is the executable form of this file.** It holds the same tier as a manifest and
+installs, verifies, or updates it; `validate.sh` fails if the manifest and the tables below name
+different things. Until 2026-08-13 this file was the *only* record, `install.sh` provisioned none
+of it, and the entire tier was absent on a machine whose docs said it was installed. Prose that
+nothing executes is a wish, not a configuration.
+
+```bash
+../skills.sh --check     # local, no network: is the tier actually present?
+../skills.sh             # install whatever is missing
+../skills.sh --update    # update skills and the marketplace cache
+```
 
 A skill installed globally costs its description in every session, on both harnesses, forever.
 That is the budget line. Keep only skills whose trigger and complete dependency chain are safe in
@@ -13,54 +25,65 @@ every repository; the full catalog is the ECC mistake again.
 
 They are managed by different tools and do not share a store:
 
-| | Store | Installed with | Discovery |
+| | Installed with | Where it lands | Discovery |
 |---|---|---|---|
-| **Skills** | `~/.agents/skills/` | `npx skills add -g` | Codex reads `~/.agents/skills` natively ("universal"); Claude Code gets a symlink into `~/.claude/skills/` |
-| **Plugins** | `~/.claude/plugins/`, `~/.codex/plugins/` | `claude plugin` / `codex plugin` | each harness's own marketplace cache |
+| **Skills** | `npx skills add -g` | `~/.claude/skills/<name>/` and `~/.codex/skills/<name>/`; `~/.agents/skills/` is the shared store the CLI uses when a single copy backs several agents | each harness scans its own skills directory |
+| **Plugins** | `claude plugin` / `codex plugin` | `~/.claude/plugins/marketplaces/<market>/`, enabled in `~/.claude/settings.json` | each harness's own marketplace cache |
 
-`~/.agents/skills` alone is **not** enough for Claude Code. A skill placed there without the
-`~/.claude/skills` symlink is inert on Claude and invisible in `/skills`. This is the failure mode
-that left `find-skills` dead from 2026-08-04 to 2026-08-05: it was installed to `~/.agents/skills`
-with `lastSelectedAgents` that did not include `claude-code`.
+**Do not treat any particular store layout as the contract.** The `skills` CLI decides it and has
+changed it: targeting `--agent claude-code` alone now *copies* the skill straight into
+`~/.claude/skills/<name>/` and never creates `~/.agents/`, while a multi-agent install may keep one
+copy in `~/.agents/skills` and link to it. Both are fine. A missing `~/.agents/` is not a fault to
+repair — verified on 2026-08-13, `skills` CLI via `npx skills@latest`, Claude Code 2.1.231.
 
-Always pass the agents explicitly:
+What must be true is that the harness can *see* the skill, so check for the file it reads:
+
+```bash
+ls ~/.claude/skills/*/SKILL.md      # what Claude Code actually loads
+npx skills list -g                  # source repo and target agents per skill
+```
+
+`../skills.sh --check` is that check, for every entry in the tier at once, and it is what
+`install.sh` now reports on. The historical failure it guards against: `find-skills` was dead from
+2026-08-04 to 2026-08-05 because it was installed with `lastSelectedAgents` that did not include
+`claude-code`, so always pass the agents explicitly rather than accepting the remembered default:
 
 ```bash
 npx skills add -g <owner>/<repo> --skill <names...> --agent claude-code codex -y
 ```
 
-Verify after every install — the presence of the store directory proves nothing:
-
-```bash
-ls -la ~/.claude/skills/    # expect symlinks into ../../.agents/skills/
-ls    ~/.agents/skills/     # Codex reads these directly
-```
-
 ## Installed: skills
 
-Reproduce the global skill tier on a new machine:
+Reproduce the global skill tier on a new machine with `../skills.sh`. The equivalent raw commands,
+which is what the script runs:
 
 ```bash
 npx skills add -g vercel-labs/skills --skill find-skills --agent claude-code codex -y
 npx skills add -g mattpocock/skills \
-  --skill diagnosing-bugs handoff resolving-merge-conflicts wizard \
+  --skill diagnosing-bugs grilling handoff resolving-merge-conflicts wayfinder wizard \
   --agent claude-code codex -y
 ```
+
+All seven names were confirmed still present upstream on 2026-09-25 (`npx skills add <repo> --list`).
+Check that before assuming a missing skill means a broken install — `mattpocock/skills` renames and
+retires skills, and it now also ships a separate `claude-handoff`, which is not this `handoff`.
 
 | Skill | Source | Why global |
 |---|---|---|
 | `find-skills` | vercel-labs/skills | Discovery entry point; searches skills.sh by keyword or owner |
 | `diagnosing-bugs` | mattpocock/skills | Reproduce → minimize → hypothesize → instrument → make an evidence-backed local fix. No repo assumptions; publishing and external mutations remain forbidden |
+| `grilling` | mattpocock/skills | Stress-tests a plan or decision by relentless questioning. Global by owner decision, 2026-09-25 |
 | `handoff` | mattpocock/skills | Compacts a session into a continuation document |
 | `resolving-merge-conflicts` | mattpocock/skills | Hunk-by-hunk by intent |
+| `wayfinder` | mattpocock/skills | Maps work too large for one session as decision tickets on the issue tracker. Global by owner decision, 2026-09-25; it still needs `setup-matt-pocock-skills` in a repo to know the tracker, and its calls to `domain-modeling` find nothing because that skill stays uninstalled |
 | `wizard` | mattpocock/skills | Generates interactive bash wizards for steps only a human can do — secrets, CI credentials, third-party dashboards, one-off cutovers. The best fit in the catalog for this toolchain |
 
 ## Installed: vendored skills
 
 Adapted copies that live in this repo under `../vendor/skills/<name>/`. `install.sh` symlinks
-each one into `~/.claude/skills/` and `~/.codex/skills/` exactly as it links `skill/`.
-`npx skills update` cannot change them; upstream changes arrive only by re-reading upstream and
-editing here.
+each one into `~/.claude/skills/` and `~/.codex/skills/` exactly as it links `skill/`. `skills.sh`
+does not touch them, and `npx skills update` cannot change them; upstream changes arrive only by
+re-reading upstream and editing here.
 
 Both are explicit-invoke only on both harnesses, so they cost nothing until called:
 `disable-model-invocation: true` in `SKILL.md` for Claude Code (the description is not loaded),
@@ -86,14 +109,14 @@ restating `src/core.md` and the Matt Pocock tier.
 
 These depend on repository-specific tracker, specification, review, or domain-document context:
 
-`setup-matt-pocock-skills`, `to-spec`, `to-tickets`, `implement`, `triage`, `wayfinder`,
-`code-review`, `grill-with-docs`
+`setup-matt-pocock-skills`, `to-spec`, `to-tickets`, `implement`, `triage`, `code-review`,
+`grill-with-docs`
 
 `research` is also per repo, and only when a durable cited Markdown artifact is explicitly wanted.
 Ordinary documentation lookup uses current primary sources on the web; it should not
 automatically spawn an agent and write a file. `grill-me` is not installed because it is only a
-seven-line launcher for the separate `grilling` skill. Avoiding that hidden dependency is cheaper
-than globalizing both; use `grill-with-docs` in repositories that benefit from durable domain docs.
+seven-line launcher for `grilling`, which is global. Use `grill-with-docs` in repositories that
+benefit from durable domain docs.
 
 ### Deliberately not installed at all
 
@@ -104,7 +127,10 @@ Ansible, or Puppet.
 ## Installed: plugins (Trail of Bits)
 
 Marketplace added to both harnesses. Codex consumes Claude plugin marketplaces directly, so there
-is no Codex-specific sidecar:
+is no Codex-specific sidecar. Installed versions as of 2026-08-13: `gh-cli` 1.5.1, `git-cleanup`
+1.0.1, `insecure-defaults` 2.0.0. `claude plugin install` writes `enabledPlugins` and
+`extraKnownMarketplaces` into `~/.claude/settings.json` — that is the cheap local proof a plugin is
+present, and what `../skills.sh --check` reads:
 
 ```bash
 claude plugin marketplace add trailofbits/skills
@@ -116,6 +142,14 @@ codex plugin add gh-cli@trailofbits
 codex plugin add git-cleanup@trailofbits
 codex plugin add insecure-defaults@trailofbits
 ```
+
+### The Codex half is conditional
+
+`codex plugin` and `codex plugin marketplace` exist (codex-cli 0.146.0), but a `codex` binary on
+`PATH` does not mean Codex is usable: without `~/.codex/config.toml` it has no configuration and no
+auth, and installing into it writes state nothing reads. `../skills.sh` therefore treats Codex as
+absent unless that file exists, and says so instead of failing. On this machine the Codex commands
+above are documented but deliberately unrun.
 
 | Plugin | Scope | Notes |
 |---|---|---|
@@ -155,8 +189,53 @@ at `refuted: true`.
 
 | Plugin | Gate |
 |---|---|
-| `static-analysis` (`semgrep`) | Repos where a Semgrep scan is actually wanted. `semgrep` 1.172.0 is installed globally; the plugin and rulesets remain per-repo decisions |
+| `static-analysis` (`semgrep`) | Repos wanting the plugin's orchestration — parallel scans, SARIF, per-finding verifiers — on top of Semgrep. The binary alone covers ad-hoc scanning (see below); the plugin is the per-repo decision — `claude plugin install static-analysis@trailofbits --scope project` |
 | `agentic-actions-auditor` | Only repos whose workflows invoke Claude Code Action, Gemini CLI, OpenAI Codex, or GitHub AI Inference. It audits AI agents in CI, not general Actions security |
+
+`static-analysis` 1.3.1 was enabled at user scope until 2026-08-17, contradicting the gate above;
+`./skills.sh --check` reported the tier complete and so never surfaced it. It is now uninstalled and
+the enabled set matches the manifest exactly. It was never load-bearing, and it cannot be fed local
+rule paths anyway — `run-scans.sh` jq-validates every ruleset as a registry identifier.
+
+### Semgrep is not harness infrastructure
+
+`semgrep` (1.172.0 via Homebrew here) is a manual tool, not part of this harness. Nothing installs
+or wraps it. For infra work its coverage is thin next to what is already in the toolchain — 63
+Terraform rules against `checkov`/`tfsec`/`trivy`, 7 Dockerfile against `hadolint`, 12 Actions
+against `actionlint`/`zizmor`, 52 secrets against `gitleaks`, and `insecure-defaults` already
+answers reachability. Its real win is `p/python`'s 151 rules, on a minority surface. Use it when you
+remember it exists:
+
+```bash
+semgrep -e '<pattern>' -l <lang> <path>     # AST-aware grep, no network
+```
+
+**Put `export SEMGREP_ENABLE_VERSION_CHECK=0` in your shell profile.** The version check runs on
+*every* invocation, including `--version` and ad-hoc `-e` patterns, and behind a TLS interceptor it
+cannot succeed and does not fail fast. Measured 2026-08-17: the same `-e` scan took **99 s** without
+the variable and **1 s** with it. Harmless on an unintercepted machine, so it belongs in the profile
+on every machine.
+
+Registry configs (`--config p/…`, `r/…`, `auto`) cannot work from the host binary behind Netskope,
+and no trust store fixes it: the intercepting CA (`ca.lnw.goskope.com`) carries no `keyUsage`
+extension, and OpenSSL ≥3.5 rejects that *structurally* — `CA cert does not include key usage
+extension`. It is a malformed CA, not an untrusted one, so `REQUESTS_CA_BUNDLE` and `SSL_CERT_FILE`
+change nothing. semgrep 1.172.0 links OpenSSL 3.6.3. `git clone` is unaffected; git uses a
+different TLS stack. If you genuinely want a registry pack on an intercepted machine, run the
+container, whose older OpenSSL accepts the CA structure:
+
+```bash
+docker run --rm -v "$PWD:/src" -v ~/.config/certs/corp-ca-bundle.pem:/ca.pem:ro \
+  -e REQUESTS_CA_BUNDLE=/ca.pem -e SSL_CERT_FILE=/ca.pem \
+  -e SEMGREP_ENABLE_VERSION_CHECK=0 \
+  semgrep/semgrep semgrep --config p/python --metrics=off /src
+```
+
+A shim that routed this automatically, plus a script that vendored expanded packs into
+`~/.config/semgrep/packs`, were built and removed on 2026-08-17 — see the `docs/SOURCES.md`
+changelog for why. Short version: they hardcoded `/opt/homebrew`, gated on a certificate file
+rather than on the actual failure, and the packs carry a license that keeps them out of Git, so
+none of it could travel to another machine. This section can.
 
 ### Semgrep ruleset pinning
 
@@ -186,6 +265,12 @@ upstream `LICENSE`, which is the only condition.
 ## Maintenance
 
 ```bash
+../skills.sh --update    # npx skills update -g -y, then the marketplace cache
+```
+
+Which runs the two underlying commands, plus the Codex one by hand where Codex is configured:
+
+```bash
 npx skills update -g -y                       # skills
 claude plugin marketplace update trailofbits  # plugins
 codex  plugin marketplace upgrade trailofbits
@@ -193,3 +278,9 @@ codex  plugin marketplace upgrade trailofbits
 
 Both upstreams move fast. Re-read a skill body after an update before trusting it — they run with
 full agent permissions.
+
+## Adding or removing an entry
+
+Edit the manifest at the top of `../skills.sh` **and** the tables here in the same change.
+`validate.sh` fails when they disagree, which is the whole point: the tier cannot drift back into
+being documentation-only.

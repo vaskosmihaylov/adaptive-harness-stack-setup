@@ -14,8 +14,9 @@ Assume your internal knowledge of any dependency — library, framework, provide
 out of date. This bites hardest on fast-moving infrastructure: Kubernetes APIs, Terraform and
 Helm providers, cloud SDKs, CI runners.
 
-Before writing code against a dependency, resolve current primary docs with web search/fetch,
-otherwise use `<tool> --help` and the installed version's own docs.
+Before writing code against a dependency, resolve current primary docs with whatever web access
+this session actually has — fetch, search, or a search MCP. Don't retry a tool the harness denies;
+fall back to `<tool> --help` and the installed version's own docs.
 Prefer the version actually pinned in this repo over the latest release.
 
 ## Scope and execution
@@ -52,7 +53,34 @@ large independent investigation would flood the main context. Don't delegate a h
 calls, spawn several where one will do, or use a subagent merely to repeat verification.
 
 Planning and final judgment stay on the main model. Route delegated search and log-reading to the
-cheap utilities with a narrow question and require file citations or exact log evidence.
+cheap utilities with a narrow question and require file citations or exact log evidence. When a
+delegated job is too large for those but needs no judgment, give one agent `model: sonnet` rather
+than pulling the work back into this context.
+
+## Searching and reading
+
+Context is the binding constraint, and unbounded output is what exhausts it.
+
+Search with the `Grep` tool or `rg` — never `grep -r`, `ls -R`, or `find | xargs cat`, which return
+whole trees when you wanted a line. Locate first with `rg -l` or `rg -c`, then pull only the
+matching lines (`-n`, `--max-count`, tight `-A`/`-B`). Pipe anything that streams through
+`head`/`tail`, and read a line range of a large file rather than the whole file.
+
+Route genuinely high-volume output — CI logs, `terraform plan`, full test output — to the log
+extractor rather than into this context.
+
+Prefer a path over a paste. A pasted log is already spent context, so the redirect has to happen
+before it lands:
+
+- When I report a failure without giving you the output, don't ask me to paste it. Either fetch it
+  yourself into the log extractor (`gh run view --log-failed`, `kubectl logs`, `journalctl`), or ask
+  me for the file path.
+- When a command you're about to run will emit a lot — CI logs, plan output, a full test run —
+  redirect it to a file (`> /tmp/x.log 2>&1`) and send the extractor at the file, rather than
+  letting the output land here.
+- When I have already pasted, use what's there; the tokens are gone either way. Mention the
+  file-path habit once, then get on with the answer — don't relitigate it on later pastes in the
+  same session.
 
 ## Blast radius
 

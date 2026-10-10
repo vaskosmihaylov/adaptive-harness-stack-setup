@@ -3,8 +3,16 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-bash -n "$ROOT/build.sh" "$ROOT/install.sh" "$ROOT/validate.sh"
+bash -n "$ROOT/build.sh" "$ROOT/install.sh" "$ROOT/validate.sh" "$ROOT/skills.sh"
 jq empty "$ROOT/settings/claude-settings.json"
+
+# The tier documented in docs/SKILLS.md and the tier skills.sh installs must be the
+# same tier. Drift between them is what left the whole global skill tier documented
+# but absent, so it is a validation failure, not a footnote.
+while read -r kind name _; do
+  grep -q -- "\`$name\`" "$ROOT/docs/SKILLS.md" \
+    || { echo "docs/SKILLS.md does not mention $kind '$name' from the skills.sh manifest" >&2; exit 1; }
+done < <(bash "$ROOT/skills.sh" --manifest | grep -Ev '^marketplace ')
 
 # Vendored skills install globally on both harnesses, so each must be user-invoke-only
 # on both (no standing description cost), named after its directory, documented, and carry

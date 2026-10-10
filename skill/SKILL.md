@@ -44,11 +44,14 @@ counterproductive on Opus 5. `docs/SOURCES.md` carries the citations.
 4. Re-check the cheap tier in `agents/` — model names go stale fastest. Verify the ids against
    current official docs and the installed CLIs before writing them (`docs/TOKENS.md` explains
    the tiering). Prefer overriding native exploration roles over adding synonymous agents.
-5. Audit `docs/SKILLS.md` against actual discovery and plugin state: `~/.agents/skills`, Claude
-   skill symlinks, both plugin lists, and both MCP lists. On a new machine, offer the documented
-   network installs and MCP authentication; never perform them silently.
-6. Edit authored sources, agents, and their rationale docs. Then run `./validate.sh`,
-   `./install.sh --dry-run`, and `./install.sh`.
+5. Run `./skills.sh --check` for the documented tier, then audit what it cannot see: both MCP
+   lists, and any skill or plugin installed outside the manifest. Confirm the upstream names still
+   exist (`npx skills add <repo> --list`, the marketplace manifest) before concluding a name is
+   fine. On a new machine, offer `./skills.sh` and MCP authentication; never install silently.
+6. Edit authored sources, agents, and their rationale docs — a change to the tier means editing the
+   `skills.sh` manifest and `docs/SKILLS.md` together. Then run `./validate.sh`,
+   `./install.sh --dry-run`, and `./install.sh` — adding `--claude` on a machine where Codex is
+   absent or unconfigured.
 7. Record what changed and why in the `docs/SOURCES.md` changelog.
 
 Report the net line delta. If the file grew, justify it.
@@ -59,6 +62,12 @@ Report the net line delta. If the file grew, justify it.
 
 Set up the current repository. Follow `docs/PER-REPO.md`. This mode may create local repository
 files, but it never edits `~/.claude` or `~/.codex`.
+
+Write harness-specific config only for harnesses installed on this machine — check `command -v
+claude` and `command -v codex` (a Codex binary with no `~/.codex/config.toml` is an unconfigured
+install, so treat it as absent). `CLAUDE.md` and `AGENTS.md` are the exception: always write both.
+`AGENTS.md` is the cross-tool convention that other agents read, so it earns its place in a
+shared repo whether or not Codex runs here.
 
 1. Resolve the target from the current working directory (`git rev-parse --show-toplevel` when it
    is a Git repository, otherwise the explicit working directory). Refuse the filesystem root,
@@ -76,13 +85,17 @@ files, but it never edits `~/.claude` or `~/.codex`.
    Recommend repository-configured skills only when their tracker or documentation workflow is
    useful; include `setup-matt-pocock-skills` when a selected skill needs its configuration.
    Never install the full catalog by default or both the Claude plugin and editable copies. Then
-   assess the two per-repo security plugins: `static-analysis`/`semgrep` (pin third-party ruleset
-   revisions) and `agentic-actions-auditor` (only if workflows invoke AI agents).
-4. Assess repository agents. Default to none. Create matching `.claude/agents/` and
-   `.codex/agents/` definitions only for a recurring bounded job that needs a distinct model,
-   tool/permission boundary, or context window. Pin model and effort; prefer read-only. Do not
+   assess the two per-repo security plugins: `static-analysis`/`semgrep` (not installed at any
+   scope — recommend it only for the orchestration it adds over the plain binary, install with
+   `--scope project`, pin third-party ruleset revisions, and point third-party configs at rule
+   subdirectories rather than a clone root) and `agentic-actions-auditor` (only if workflows
+   invoke AI agents). Behind a TLS interceptor, Semgrep registry rulesets cannot be fetched by the
+   host binary at all; read `docs/SKILLS.md` rather than debugging TLS in repo mode.
+4. Assess repository agents. Default to none. Create definitions only for a recurring bounded job
+   that needs a distinct model, tool/permission boundary, or context window — in `.claude/agents/`
+   and `.codex/agents/`, per installed harness. Pin model and effort; prefer read-only. Do not
    recreate generic planner, implementer, reviewer, or technology-specialist roles.
-5. Assess deterministic hooks for both harnesses (`.claude/settings.json` and
+5. Assess deterministic hooks for each installed harness (`.claude/settings.json`; for Codex,
    `.codex/hooks.json` or `.codex/config.toml`). Add only repository-native checks or protections
    that must run every time; do not add generic verification scaffolding.
 6. Assess project-scoped MCP. Prefer native CLIs. Never write credentials or modify
@@ -111,4 +124,7 @@ Do not copy the global guidelines into the repo file — they already load.
 - Never rewrite `~/.codex/config.toml`; it holds ~50 project trust levels. Report drift, don't fix it.
 - Global files carry *behavior*. Repo files carry *facts about that repo*. Don't mix them.
 - Verify model ids against the installed CLI before writing them into `agents/`. They change often.
+- In `agents/claude/`, pin the tier alias (`haiku`, `sonnet`, `opus`), not a dated id. A machine
+  routing through a gateway resolves aliases via `ANTHROPIC_DEFAULT_*_MODEL` in `settings.json`;
+  a hard-coded vendor id bypasses that mapping and fails.
 - Treat network installs, MCP authentication, and schedules as offers until the user approves them.

@@ -10,6 +10,8 @@
 #   ./install.sh --codex      only Codex CLI
 #
 # Skills vendored under vendor/skills/ are linked in by this installer, like skill/.
+# The third-party skill and plugin tier is provisioned by ./skills.sh, which needs the
+# network. This installer only reports whether that tier is complete.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -24,7 +26,7 @@ for arg in "$@"; do
     --uninstall) UNINSTALL=1 ;;
     --claude)    DO_CODEX=0 ;;
     --codex)     DO_CLAUDE=0 ;;
-    -h|--help)   sed -n '2,12p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    -h|--help)   sed -n '2,/^set -euo/{/^set -euo/!p;}' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; exit 0 ;;
     *) echo "unknown flag: $arg" >&2; exit 2 ;;
   esac
 done
@@ -47,7 +49,11 @@ install_file() { # install_file <source> <destination> <label>
   fi
   backup "$2" "$3"
   act "write $2"
-  [ "$DRY" = 0 ] && cp "$1" "$2"
+  # Must be an if, not `[ ... ] && cp`: a trailing false AND-list makes the function
+  # return 1, and `set -e` then kills the whole run on the first --dry-run file.
+  if [ "$DRY" = 0 ]; then
+    cp "$1" "$2"
+  fi
 }
 
 install_skill_link() { # install_skill_link <source-dir> <destination> <label>
@@ -103,7 +109,8 @@ if [ "$UNINSTALL" = 1 ]; then
       [ "$DRY" = 0 ] && rm -f "$HOME/.claude/agents/$n"
     done
     retire "$HOME/.claude/agents/scout.md" claude
-    say "left ~/.claude/settings.json alone — remove the permissions block by hand if you want it gone"
+    say "left ~/.claude/settings.json alone — remove the permissions block and the two"
+    say "CLAUDE_CODE_MAX_* env keys by hand if you want them gone"
   fi
   if [ "$DO_CODEX" = 1 ]; then
     backup "$HOME/.codex/AGENTS.md" codex
@@ -138,7 +145,9 @@ if [ "$DO_CLAUDE" = 1 ]; then
 
   install_file "$DIST/CLAUDE.md" "$HOME/.claude/CLAUDE.md" claude
 
-  # Merge the permission allowlist into settings.json without clobbering existing keys.
+  # Merge the permission allowlist and subagent caps into settings.json without clobbering
+  # existing keys. env merges per key, harness keys winning, so machine-specific values
+  # (auth token, base URL, extra CA) survive a re-run untouched.
   need jq
   SETTINGS="$HOME/.claude/settings.json"
   settings_input="$SETTINGS"
@@ -152,12 +161,13 @@ if [ "$DO_CLAUDE" = 1 ]; then
     | $cur
     | .permissions.allow = (((($cur.permissions.allow) // []) + $new.permissions.allow) | unique)
     | .permissions.ask   = (((($cur.permissions.ask)   // []) + $new.permissions.ask)   | unique)
+    | .env = ((($cur.env) // {}) + (($new.env) // {}))
   ' "$settings_input" "$ROOT/settings/claude-settings.json" > "$tmp"
   if [ -f "$SETTINGS" ] && cmp -s "$tmp" "$SETTINGS"; then
-    say "$SETTINGS permissions already current"
+    say "$SETTINGS permissions and subagent caps already current"
   else
     backup "$SETTINGS" claude
-    act "merge permissions into $SETTINGS"
+    act "merge permissions and subagent caps into $SETTINGS"
     [ "$DRY" = 0 ] && mv "$tmp" "$SETTINGS"
   fi
   rm -f "$tmp"
@@ -215,6 +225,16 @@ if [ "$DO_CODEX" = 1 ]; then
 
     echo "    note: explorer and log-digger pin their own models; config.toml is left untouched."
   fi
+  echo
+fi
+
+# ------------------------------------------------------------------- skills & plugins
+# Owned by `npx skills` and `claude plugin`, not by this installer. Reported, never
+# installed from here: provisioning them needs the network, and a global skill or a
+# plugin hook is a bigger decision than copying a file. docs/SKILLS.md is the record.
+if [ "$DO_CLAUDE" = 1 ] && command -v jq >/dev/null 2>&1; then
+  echo "Global skill and plugin tier (./skills.sh owns this):"
+  bash "$ROOT/skills.sh" --check --claude || true
   echo
 fi
 

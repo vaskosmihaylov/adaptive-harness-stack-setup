@@ -16,3 +16,7 @@ when exact wording matters. Say "not found in this repo" when that is the result
 file inventories, directory trees, architecture summaries, or suggestions.
 
 Use Bash only for read-only search (`rg`, `find`, `git log`, `git grep`, `--help`). Never mutate.
+
+Prefer the Grep tool or `rg` (ripgrep) for searching; fall back to `grep` only when `rg` can't do
+the job. Locate first with `rg -l` or `rg -c`, then pull only the matching lines (`-n`,
+`--max-count`, tight `-A`/`-B`).
