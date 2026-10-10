@@ -8,6 +8,8 @@
 #   ./install.sh --uninstall  remove what this installer put there
 #   ./install.sh --claude     only Claude Code
 #   ./install.sh --codex      only Codex CLI
+#
+# Skills vendored under vendor/skills/ are linked in by this installer, like skill/.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -48,17 +50,29 @@ install_file() { # install_file <source> <destination> <label>
   [ "$DRY" = 0 ] && cp "$1" "$2"
 }
 
-install_skill_link() { # install_skill_link <destination>
-  if [ -L "$1" ] && [ "$(readlink "$1")" = "$ROOT/skill" ]; then
-    say "$1 already current"
+install_skill_link() { # install_skill_link <source-dir> <destination> <label>
+  if [ -L "$2" ] && [ "$(readlink "$2")" = "$1" ]; then
+    say "$2 already current"
     return 0
   fi
-  backup "$1" "${2}"
-  act "install skill -> $1"
+  backup "$2" "$3"
+  act "install skill -> $2"
   if [ "$DRY" = 0 ]; then
-    rm -rf "$1"
-    ln -s "$ROOT/skill" "$1"
+    rm -rf "$2"
+    ln -s "$1" "$2"
   fi
+}
+
+# Every skill this repo installs: its own, then the vendored ones. Prints
+# "<source-dir> <name>" per line.
+own_skills() {
+  printf '%s %s\n' "$ROOT/skill" adaptive-harness-stack-setup
+  local d
+  for d in "$ROOT"/vendor/skills/*/; do
+    [ -f "$d/SKILL.md" ] || continue
+    d="${d%/}"
+    printf '%s %s\n' "$d" "$(basename "$d")"
+  done
 }
 
 retire() { # retire <path> <label>
@@ -77,9 +91,11 @@ if [ "$UNINSTALL" = 1 ]; then
     backup "$HOME/.claude/CLAUDE.md" claude
     act "remove ~/.claude/CLAUDE.md"
     [ "$DRY" = 0 ] && rm -f "$HOME/.claude/CLAUDE.md"
-    backup "$HOME/.claude/skills/adaptive-harness-stack-setup" claude
-    act "remove ~/.claude/skills/adaptive-harness-stack-setup"
-    [ "$DRY" = 0 ] && rm -rf "$HOME/.claude/skills/adaptive-harness-stack-setup"
+    while read -r _ n; do
+      backup "$HOME/.claude/skills/$n" claude
+      act "remove ~/.claude/skills/$n"
+      [ "$DRY" = 0 ] && rm -rf "$HOME/.claude/skills/$n"
+    done < <(own_skills)
     for a in "$ROOT"/agents/claude/*.md; do
       n="$(basename "$a")"
       backup "$HOME/.claude/agents/$n" claude
@@ -93,9 +109,11 @@ if [ "$UNINSTALL" = 1 ]; then
     backup "$HOME/.codex/AGENTS.md" codex
     act "remove ~/.codex/AGENTS.md"
     [ "$DRY" = 0 ] && rm -f "$HOME/.codex/AGENTS.md"
-    backup "$HOME/.codex/skills/adaptive-harness-stack-setup" codex
-    act "remove ~/.codex/skills/adaptive-harness-stack-setup"
-    [ "$DRY" = 0 ] && rm -rf "$HOME/.codex/skills/adaptive-harness-stack-setup"
+    while read -r _ n; do
+      backup "$HOME/.codex/skills/$n" codex
+      act "remove ~/.codex/skills/$n"
+      [ "$DRY" = 0 ] && rm -rf "$HOME/.codex/skills/$n"
+    done < <(own_skills)
     for a in "$ROOT"/agents/codex/*.toml; do
       n="$(basename "$a")"
       backup "$HOME/.codex/agents/$n" codex
@@ -145,7 +163,9 @@ if [ "$DO_CLAUDE" = 1 ]; then
   rm -f "$tmp"
   [ "$settings_input" = "$SETTINGS" ] || rm -f "$settings_input"
 
-  install_skill_link "$HOME/.claude/skills/adaptive-harness-stack-setup" claude
+  while read -r src n; do
+    install_skill_link "$src" "$HOME/.claude/skills/$n" claude
+  done < <(own_skills)
 
   # Cheap-tier subagents. Copied, not symlinked: Claude Code scans this directory for
   # *.md and a dangling symlink here breaks agent discovery for the whole session.
@@ -165,7 +185,9 @@ if [ "$DO_CODEX" = 1 ]; then
 
   install_file "$DIST/AGENTS.md" "$HOME/.codex/AGENTS.md" codex
 
-  install_skill_link "$HOME/.codex/skills/adaptive-harness-stack-setup" codex
+  while read -r src n; do
+    install_skill_link "$src" "$HOME/.codex/skills/$n" codex
+  done < <(own_skills)
 
   [ "$DRY" = 0 ] && mkdir -p "$HOME/.codex/agents"
   retire "$HOME/.codex/agents/scout.toml" codex

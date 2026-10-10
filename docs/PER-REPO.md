@@ -25,7 +25,8 @@ its current catalog during every repository setup; do not rely on a hard-coded l
 install the full catalog by default.
 
 The small repo-agnostic tier is already installed globally — `diagnosing-bugs`, `handoff`,
-`resolving-merge-conflicts`, and `wizard`. See `docs/SKILLS.md`. **Do not reinstall those per
+`resolving-merge-conflicts`, and `wizard`, plus the vendored `blast-radius` and `correct`. See
+`docs/SKILLS.md`. **Do not reinstall those per
 repository.**
 
 What remains for repository mode is the repository-configured half:

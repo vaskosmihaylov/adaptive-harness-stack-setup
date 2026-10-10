@@ -53,6 +53,7 @@ dist/         generated CLAUDE.md and AGENTS.md     ← never edit; build.sh ove
 settings/     Claude permission allowlist (read-only infra commands pre-approved)
 templates/    per-repo CLAUDE.md / AGENTS.md starter
 skill/        SKILL.md — re-run this setup when a new model ships
+vendor/skills/ adapted third-party skills (blast-radius, correct); install.sh links them globally
 docs/         SOURCES.md (rationale + citations), PER-REPO.md (the full repo assessment),
               SKILLS.md (the global skill/plugin layer), TOKENS.md (tiering)
 backups/      machine-local timestamped copies of changed files (ignored by Git)
@@ -77,7 +78,8 @@ anything it replaces into `backups/`.
 It deliberately does **not** rewrite `~/.codex/config.toml` — that file holds ~50 project trust
 levels. It reports drift from the recommended settings and leaves the fix to you.
 
-It also does not install third-party skills, plugins, or MCP servers. Their reproducible commands,
+Apart from the vendored copies in `vendor/skills/`, which it links like `skill/`, it does not
+install third-party skills, plugins, or MCP servers. Their reproducible commands,
 scope, and approval boundaries live in `docs/SKILLS.md`.
 
 Auth, history, logs, and session state are never touched.

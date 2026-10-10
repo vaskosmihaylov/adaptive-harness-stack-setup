@@ -6,6 +6,22 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 bash -n "$ROOT/build.sh" "$ROOT/install.sh" "$ROOT/validate.sh"
 jq empty "$ROOT/settings/claude-settings.json"
 
+# Vendored skills install globally on both harnesses, so each must be user-invoke-only
+# on both (no standing description cost), named after its directory, documented, and carry
+# its upstream license.
+for d in "$ROOT"/vendor/skills/*/; do
+  d="${d%/}"; n="$(basename "$d")"; fm="$(sed -n '1,/^---$/{1d;/^---$/d;p;}' "$d/SKILL.md")"
+  grep -qx "name: $n" <<< "$fm" || { echo "$d/SKILL.md: name must be '$n'" >&2; exit 1; }
+  grep -q '^description:' <<< "$fm" || { echo "$d/SKILL.md: missing description" >&2; exit 1; }
+  grep -qx 'disable-model-invocation: true' <<< "$fm" \
+    || { echo "$d/SKILL.md: vendored skills must set disable-model-invocation: true" >&2; exit 1; }
+  grep -qx '  allow_implicit_invocation: false' "$d/agents/openai.yaml" 2>/dev/null \
+    || { echo "$d: agents/openai.yaml must set policy.allow_implicit_invocation: false (Codex)" >&2; exit 1; }
+  [ -f "$d/LICENSE" ] || { echo "$d: missing upstream LICENSE" >&2; exit 1; }
+  grep -q -- "\`$n\`" "$ROOT/docs/SKILLS.md" \
+    || { echo "docs/SKILLS.md does not mention vendored skill '$n'" >&2; exit 1; }
+done
+
 python3 - "$ROOT" <<'PY'
 import pathlib
 import sys

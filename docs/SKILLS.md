@@ -55,6 +55,33 @@ npx skills add -g mattpocock/skills \
 | `resolving-merge-conflicts` | mattpocock/skills | Hunk-by-hunk by intent |
 | `wizard` | mattpocock/skills | Generates interactive bash wizards for steps only a human can do — secrets, CI credentials, third-party dashboards, one-off cutovers. The best fit in the catalog for this toolchain |
 
+## Installed: vendored skills
+
+Adapted copies that live in this repo under `../vendor/skills/<name>/`. `install.sh` symlinks
+each one into `~/.claude/skills/` and `~/.codex/skills/` exactly as it links `skill/`.
+`npx skills update` cannot change them; upstream changes arrive only by re-reading upstream and
+editing here.
+
+Both are explicit-invoke only on both harnesses, so they cost nothing until called:
+`disable-model-invocation: true` in `SKILL.md` for Claude Code (the description is not loaded),
+and `agents/openai.yaml` with `policy.allow_implicit_invocation: false` for Codex (the shape
+Codex's own `.system/review-agent` ships, verified against codex-cli 0.146.0 on 2026-10-10).
+`validate.sh` fails a vendored skill missing either, its `LICENSE`, or a row here.
+
+| Skill | Upstream | Why global | What changed from upstream |
+|---|---|---|---|
+| `blast-radius` | `cursor/plugins` `pstack/skills/blast-radius` @ `d73344b` (2026-10-09) | Finds what a change breaks beyond the diff and proves the one safety fact with a real dry-run. Fits every infra repo: replacement-vs-update, out-of-repo consumers, version-default drift | Proof ladder and "where grep stops" rewritten for `terraform plan`, `helm template`, `kubectl diff`, `--check`/`--noop`; read-only rule added; dependencies on pstack's `why`, `arena`, and `unslop` removed |
+| `correct` | `cursor/plugins` `pstack/skills/correct` @ `d73344b` (2026-10-09) | Turns repeated agent corrections into enforced checks, highest level first. The same job this harness does globally, applied per repo | Levels retargeted from app types to Terraform/Helm/Ansible/Puppet validation, policy linters, and tests; a harness-hook level added for mistakes in what the agent runs |
+
+The rest of pstack was reviewed on 2026-10-10 and left out: `poteto-mode` and the 24
+`principle-*` skills are one author's operating style, mostly already in `src/core.md`, and
+`principle-never-block-on-the-human` contradicts its confirmation rules; `recall` reads Cursor
+transcript paths; `swarm`, `arena`, and `interrogate` are multi-agent fan-outs; `unslop` is
+already installed separately; `tdd`, `typescript-best-practices`, and `make-bot-ui` assume
+application code. `addyosmani/agent-skills` was rejected whole on the same date: 25
+model-invoked skills, none mentioning Terraform, Helm, Kubernetes, or Ansible, largely
+restating `src/core.md` and the Matt Pocock tier.
+
 ### Deliberately not global — per repo only
 
 These depend on repository-specific tracker, specification, review, or domain-document context:
@@ -153,7 +180,8 @@ revisions.** Keep the skill's own `--metrics=off` discipline: `--config auto` ph
 `trailofbits/skills` is **CC-BY-SA-4.0**. Share-alike. Using the plugins is unencumbered, but
 vendoring or adapting their skill text into a repository makes the derivative subject to SA.
 Check before that lands in a company repository. `mattpocock/skills` and `hashicorp/agent-skills`
-do not carry this constraint.
+do not carry this constraint. The vendored pstack skills are MIT; each directory keeps the
+upstream `LICENSE`, which is the only condition.
 
 ## Maintenance
 
